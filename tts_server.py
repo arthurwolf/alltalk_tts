@@ -16,12 +16,15 @@ from fastapi import (
     Request,
     Response,
     Depends,
+    HTTPException,
 )
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Template
 from contextlib import asynccontextmanager
+
 
 ###########################
 #### STARTUP VARIABLES ####
@@ -119,6 +122,15 @@ async def startup_shutdown(no_actual_value_it_demanded_something_be_here):
 
 # Create FastAPI app with lifespan
 app = FastAPI(lifespan=startup_shutdown)
+
+# Allow all origins, and set other CORS options
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Set this to the specific origins you want to allow
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 #####################################
@@ -647,12 +659,32 @@ async def tts_demo_request(request: Request, text: str = Form(...), voice: str =
     except Exception as e:
         return JSONResponse(content={"error": "An error occurred"}, status_code=500)
 
+
 # Gives web access to the output files
 @app.get("/audio/{filename}")
 async def get_audio(filename: str):
-    audio_path = this_dir / "outputs" / filename
-    return FileResponse(audio_path)
+    audio_path = Path("outputs") / filename
+    if not audio_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(path=audio_path)
 
+@app.get("/audiocache/{filename}")
+async def get_audio(filename: str):
+    audio_path = Path("outputs") / filename
+    if not audio_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    response = FileResponse(
+        path=audio_path,
+        media_type='audio/wav',
+        filename=filename
+    )
+    # Set caching headers
+    response.headers["Cache-Control"] = "public, max-age=604800"  # Cache for one week
+    response.headers["ETag"] = str(audio_path.stat().st_mtime)  # Use the file's last modified time as a simple ETag
+
+    return response
 
 #########################
 #### VOICES LIST API ####
@@ -906,9 +938,11 @@ async def tts_generate(
                 timestamp = int(time.time())
                 output_file_path = this_dir / "outputs" / f"{output_file_name}_{timestamp}.wav"
                 output_file_url = f'http://{params["ip_address"]}:{params["port_number"]}/audio/{output_file_name}_{timestamp}.wav'
+                output_cache_url = f'http://{params["ip_address"]}:{params["port_number"]}/audiocache/{output_file_name}_{timestamp}.wav'
             else:
                 output_file_path = this_dir / "outputs" / f"{output_file_name}.wav"
                 output_file_url = f'http://{params["ip_address"]}:{params["port_number"]}/audio/{output_file_name}.wav'
+                output_cache_url = f'http://{params["ip_address"]}:{params["port_number"]}/audiocache/{output_file_name}_{timestamp}.wav'
             if text_filtering == "html":
                 cleaned_string = html.unescape(standard_filtering(text_input))
             elif text_filtering == "standard":
@@ -920,7 +954,7 @@ async def tts_generate(
             autoplay = False
         if autoplay:
             play_audio(output_file_path, autoplay_volume)
-        return JSONResponse(content={"status": "generate-success", "output_file_path": str(output_file_path), "output_file_url": str(output_file_url)}, status_code=200)
+        return JSONResponse(content={"status": "generate-success", "output_file_path": str(output_file_path), "output_file_url": str(output_file_url), "output_cache_url": str(output_cache_url)}, status_code=200)
     except Exception as e:
         return JSONResponse(content={"status": "generate-failure", "error": "An error occurred"}, status_code=500)
 
