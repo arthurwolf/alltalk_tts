@@ -406,28 +406,41 @@
             audioPlayer.pause();
 
             const formData = new FormData(form);
+
+            // Get and clean the text input from the textarea
+            let textInput = formData.get('text');
+            let cleanedText = textInput.replace(/ \- | \– /g, ' '); // Replace hyphens
+            cleanedText = cleanedText.replace(/\.\s'/g, ".'"); // Remove space between period and single quote
+            cleanedText = cleanedText.replace(/'/g, ""); // Remove all single quotes
+
+            // Set the cleaned text back to the form data
+            formData.set('text', cleanedText);
+
+            // Rest of your form submission code...
+            // Check if streaming or not and handle accordingly
             if (formData.get('streaming') === 'true') {
+                // For streaming, update the audio player src
                 const searchParams = new URLSearchParams(formData).toString();
                 audioPlayer.src = "/tts-demo-request?" + searchParams;
                 audioPlayer.load(); // Reload the audio player
             } else {
+                // For non-streaming, send a POST request
                 const response = await fetch('/tts-demo-request', {
                     method: 'POST',
                     body: formData,
                     cache: "no-store"
                 });
 
-                // If not streaming, we just get the output file path
+                // Process the response
                 const result = await response.json();
-
-                // Update the generated audio file path
+                // Update output file path and audio player source
                 const outputFilePath = document.getElementById('outputFilePath');
                 outputFilePath.textContent = result.output_file_path;
-                // Update the audio player source
                 audioPlayer.src = `/audio/${result.output_file_path}`;
                 audioPlayer.load(); // Reload the audio player
             }
         });
+
     </script>
     <p style="padding-left: 30px;"><a href="#toc">Back to top of page</a></p>
 
