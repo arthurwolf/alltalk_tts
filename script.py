@@ -573,7 +573,7 @@ def output_modifier(string, state):
     string = re.sub(img_pattern, '', string)
     string = re.sub(audio_pattern, '', string)
     original_string = string
-    #print("ORIGINAL STRING IS:", original_string)
+    print("\033[91mTHE ORIGINAL STRING AFTER TRYING TO FILTER IMAGES OUT IS: \033[0m", original_string, "\n\n\n")
     cleaned_string = before_audio_generation(string, params)
     if cleaned_string is None:
         return
